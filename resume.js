@@ -39,6 +39,19 @@ async function writePdf(htmlContent, outputPath) {
 }
 
 async function generateResumePdf() {
+    // Create resumes directory if it doesn't exist
+    const resumesDir = path.join(__dirname, 'resumes');
+    if (!fs.existsSync(resumesDir)) {
+        fs.mkdirSync(resumesDir);
+    }
+
+    // Find the next available index
+    const files = fs.readdirSync(resumesDir);
+    const pdfFiles = files.filter(f => f.startsWith('resume_') && f.endsWith('.pdf'));
+    const nextIndex = pdfFiles.length > 0
+        ? Math.max(...pdfFiles.map(f => parseInt(f.match(/resume_(\d+)\.pdf/)[1]))) + 1
+        : 1;
+
     // Read the CSS file
     const cssContent = fs.existsSync('resume.css') ? fs.readFileSync('resume.css', 'utf8') : '';
 
@@ -66,8 +79,8 @@ async function generateResumePdf() {
         </html>
     `;
 
-    // Generate PDF in the root directory
-    const outputPath = path.join(__dirname, 'resume.pdf');
+    // Generate PDF in the resumes directory with incremental naming
+    const outputPath = path.join(resumesDir, `resume_${nextIndex}.pdf`);
     await writePdf(htmlContent, outputPath);
     console.log(`PDF generated at: ${outputPath}`);
 }
