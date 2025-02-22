@@ -5,7 +5,7 @@ This tool converts a markdown resume to a professionally formatted PDF using Pup
 ## Prerequisites
 
 - Node.js (v14 or higher)
-- npm (comes with Node.js)
+- pnpm 
 
 ## Installation
 
@@ -16,7 +16,7 @@ This tool converts a markdown resume to a professionally formatted PDF using Pup
    ```
 3. Install dependencies:
    ```bash
-   npm install
+   pnpm install
    ```
 
 ## Usage
@@ -25,7 +25,7 @@ This tool converts a markdown resume to a professionally formatted PDF using Pup
 2. The styling is controlled by `resume.css`
 3. Run the converter:
    ```bash
-   npm start
+   pnpm start
    ```
 4. Find your generated PDF as `resume.pdf` in the same directory
 
