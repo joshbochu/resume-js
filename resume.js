@@ -8,6 +8,7 @@ async function writePdf(htmlContent, outputPath) {
         headless: 'new',
         args: [
             '--no-sandbox',
+            '--print-to-pdf-no-header',  // Match Python's option
             '--enable-logging=stderr',
             '--log-level=2',
             '--in-process-gpu',
@@ -16,74 +17,96 @@ async function writePdf(htmlContent, outputPath) {
     });
     const page = await browser.newPage();
 
-    // Set content and wait for it to load
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-
-    // Set page size to A4 at 96 DPI
-    await page.setViewport({
-        width: 794, // A4 width in pixels at 96 DPI
-        height: 1123 // A4 height in pixels at 96 DPI
+    // Use same base64 encoding approach as Python
+    const html64 = Buffer.from(htmlContent).toString('base64');
+    await page.goto(`data:text/html;base64,${html64}`, {
+        waitUntil: 'networkidle0'
     });
 
-    // Generate PDF with Chrome's settings matching Python version
+    // Remove explicit page size settings to match Python behavior
+    // which uses Chrome's defaults
     await page.pdf({
         path: outputPath,
-        format: 'A4',
         printBackground: true,
-        displayHeaderFooter: false,  // Matches --print-to-pdf-no-header
-        preferCSSPageSize: true,     // Let CSS control the page size and margins
-        timeout: 60000
+        displayHeaderFooter: false,
+        margin: {
+            top: '0',
+            right: '0',
+            bottom: '0',
+            left: '0'
+        }
     });
 
     await browser.close();
 }
 
-async function generateResumePdf() {
+async function generateResumePdf(inputFile = 'resume.md') {
+    // Get the prefix from the input file path like Python does
+    const prefix = path.join(
+        path.dirname(path.resolve(inputFile)),
+        path.basename(inputFile, path.extname(inputFile))
+    );
+
     // Create resumes directory if it doesn't exist
-    const resumesDir = path.join(__dirname, 'resumes');
+    const resumesDir = 'resumes';
     if (!fs.existsSync(resumesDir)) {
         fs.mkdirSync(resumesDir);
     }
 
-    // Find the next available index
-    const files = fs.readdirSync(resumesDir);
-    const pdfFiles = files.filter(f => f.startsWith('resume_') && f.endsWith('.pdf'));
-    const nextIndex = pdfFiles.length > 0
-        ? Math.max(...pdfFiles.map(f => parseInt(f.match(/resume_(\d+)\.pdf/)[1]))) + 1
-        : 1;
+    // Find next available number
+    let counter = 1;
+    let outputPath;
+    do {
+        outputPath = path.join(resumesDir, `resume_${counter}.pdf`);
+        counter++;
+    } while (fs.existsSync(outputPath));
 
-    // Read the CSS file
-    const cssContent = fs.existsSync('resume.css') ? fs.readFileSync('resume.css', 'utf8') : '';
+    // Read the CSS file - match Python's handling
+    let cssContent = '';
+    const cssPath = prefix + '.css';
+    if (fs.existsSync(cssPath)) {
+        cssContent = fs.readFileSync(cssPath, 'utf8');
+    } else {
+        console.log(prefix + '.css not found. Output will be unstyled.');
+    }
 
-    // Read the Markdown file
-    const mdContent = fs.readFileSync('resume.md', 'utf8');
+    // Read and parse the Markdown file
+    const mdContent = fs.readFileSync(inputFile, 'utf8');
 
-    // Convert Markdown to HTML
+    // Extract title from first h1 heading like Python does
+    let title = 'Resume';
+    const titleMatch = mdContent.match(/^#[^#].*$/m);
+    if (titleMatch) {
+        title = titleMatch[0].replace(/^#\s*/, '').trim();
+    }
+
+    // Use marked with settings closer to Python's markdown package
+    marked.setOptions({
+        smartypants: true  // Similar to Python's "smarty" extension
+    });
     const htmlBody = marked.parse(mdContent);
 
-    // Create the complete HTML document
-    const htmlContent = `
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <title>Resume</title>
-            <style>
-                ${cssContent}
-            </style>
-        </head>
-        <body>
-            <div id="resume">
-                ${htmlBody}
-            </div>
-        </body>
-        </html>
-    `;
+    // Match Python's HTML template exactly
+    const htmlContent = `<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<style>
+${cssContent}
+</style>
+</head>
+<body>
+<div id="resume">
+${htmlBody}
+</div>
+</body>
+</html>`;
 
-    // Generate PDF in the resumes directory with incremental naming
-    const outputPath = path.join(resumesDir, `resume_${nextIndex}.pdf`);
+    // Generate PDF with numbered suffix in resumes folder
     await writePdf(htmlContent, outputPath);
-    console.log(`PDF generated at: ${outputPath}`);
+    console.log(`Wrote ${outputPath}`);
 }
 
-// Run the script
-generateResumePdf().catch(console.error);
+// Simple command line handling like Python
+const inputFile = process.argv[2] || 'resume.md';
+generateResumePdf(inputFile).catch(console.error);
